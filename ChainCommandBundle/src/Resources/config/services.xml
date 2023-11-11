@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<container xmlns="http://symfony.com/schema/dic/services"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://symfony.com/schema/dic/services
+        https://symfony.com/schema/dic/services/services-1.0.xsd">
+
+    <services>
+        <service id="SerhiyChainConfig" class="Serhiy\ChainCommandBundle\ChainConfig" >
+            <!-- here is a heart of command chains config. I provided and example and commented it out. -->
+            <argument type="collection">
+                <argument key="foo:hello" type="collection">
+                    <argument>bar:hi</argument>
+<!--                    <argument>cache:clear</argument>-->
+                </argument>
+            </argument>
+        </service>
+
+        <service id="serhiy_chain_command.monolog_handler.console" class="Monolog\Handler\StreamHandler">
+            <argument>%kernel.logs_dir%/%kernel.environment%-console.log</argument>
+            <argument>DEBUG</argument> <!-- Set the log level to DEBUG -->
+            <tag name="monolog.handler" channel="console" />
+        </service>
+
+        <service id="serhiy_chain_command.monolog_logger.console" class="Monolog\Logger">
+            <argument>console</argument>
+            <call method="pushHandler">
+                <argument type="service" id="serhiy_chain_command.monolog_handler.console" />
+            </call>
+            <call method="pushProcessor">
+                <argument type="service" id="monolog.processor.psr_log_message" />
+            </call>
+        </service>
+
+        <service id="Serhiy\ChainCommandBundle\EventSubscriber\CommandChainSubscriber">
+            <argument type="service" id="SerhiyChainConfig" />
+            <argument type="service" id="serhiy_chain_command.monolog_logger.console" />
+            <tag name="kernel.event_subscriber" event="console.command" />
+        </service>
+    </services>
+</container>

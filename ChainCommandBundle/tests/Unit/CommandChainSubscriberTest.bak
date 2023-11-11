@@ -1,0 +1,89 @@
+<?php
+
+namespace Serhiy\ChainCommandBundle\Tests\Unit;
+
+use Monolog\Logger;
+use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionProperty;
+use Serhiy\ChainCommandBundle\ChainConfig;
+use Serhiy\ChainCommandBundle\EventSubscriber\CommandChainSubscriber;
+use Serhiy\ChainCommandBundle\Tests\Unit\Mocks\MockConsoleEvent;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Event\ConsoleCommandEvent;
+use Symfony\Component\Console\Event\ConsoleTerminateEvent;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
+
+class CommandChainSubscriberTest extends TestCase
+{
+    private function getPrivateProperty(object $object, string $propertyName): ReflectionProperty
+    {
+        $reflector = new ReflectionClass($object);
+        $property = $reflector->getProperty($propertyName);
+        $property->setAccessible(true);
+
+        return $property;
+    }
+
+    private function createCommandMock(string $name): Command
+    {
+        $commandMock = $this->createMock(Command::class);
+        $commandMock->expects($this->once())
+            ->method('getName')
+            ->willReturn($name);
+
+        $applicationMock = $this->createMock(Application::class);
+        $applicationMock->expects($this->any())
+            ->method('doRun')
+            ->willReturnCallback(static function ($input, $output) {
+                // Simulate the execution of a chained command
+            });
+
+        $commandMock->expects($this->any())
+            ->method('getApplication')
+            ->willReturn($applicationMock);
+
+        return $commandMock;
+    }
+
+    public function testOnConsoleCommandMasterCommand(): void
+    {
+        $commandName = 'master_command';
+
+        $chainConfigMock = $this->createMock(ChainConfig::class);
+        $chainConfigMock->expects($this->once())
+            ->method('isChainFollower')
+            ->with($commandName)
+            ->willReturn(false);
+
+        $loggerMock = $this->createMock(Logger::class);
+        $loggerMock->expects($this->once())
+            ->method('debug')
+            ->with("{$commandName} is not part of a chain. Just running it.");
+
+        $subscriber = new CommandChainSubscriber($chainConfigMock, $loggerMock);
+
+        // Using a real ConsoleCommandEvent instance
+        $commandEvent = new ConsoleCommandEvent(
+            $this->createCommandMock($commandName),
+            $this->createMock(InputInterface::class),
+            $this->createMock(OutputInterface::class)
+        );
+
+        // Accessing private property to check its value
+        $firstChainStartedProperty = $this->getPrivateProperty($subscriber, 'firstChainStarted');
+        $this->assertFalse($firstChainStartedProperty->getValue($subscriber));
+
+        // Call the stopPropagation method to avoid triggering actual event logic
+        $commandEvent->stopPropagation();
+
+        $subscriber->onConsoleCommand($commandEvent);
+
+        // Checking that the private property was modified
+        $this->assertTrue($firstChainStartedProperty->getValue($subscriber));
+    }
+}
